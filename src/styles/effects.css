@@ -1,0 +1,25 @@
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 0px rgba(37, 99, 235, 0.25); }
+  50% { box-shadow: 0 0 22px rgba(37, 99, 235, 0.45); }
+}
+.pulse-glow { animation: pulse-glow 2.4s ease-in-out infinite; }
+
+@keyframes coin-pop {
+  0% { transform: scale(0.6); opacity: 0; }
+  60% { transform: scale(1.05); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+.coin-pop { animation: coin-pop 0.4s ease-out; }
+
+@keyframes count-shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-2px); }
+  75% { transform: translateX(2px); }
+}
+.count-shake { animation: count-shake 0.15s ease-in-out 3; }
+
+@keyframes float-slow {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-10px); }
+}
+.float-slow { animation: float-slow 5s ease-in-out infinite; }
