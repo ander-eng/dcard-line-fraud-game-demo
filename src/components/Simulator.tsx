@@ -76,6 +76,7 @@ function computeOutcome(bet: number, round: RoundDef): { tier: Tier; delta: numb
   if (bet < round.requestAmount) {
     return { tier: 'refund', delta: 0, returned: bet };
   }
+  // 報恩金額只無條件捨去到百位，保留 500 這類零頭
   const payout = Math.floor((bet * 1.5) / 100) * 100;
   const tier: Tier = bet >= Math.round(round.requestAmount * 1.3) ? 'big-success' : 'success';
   return { tier, delta: payout - bet, returned: payout };
@@ -90,7 +91,8 @@ function computerDecision(isScamTruth: boolean): { amount: number; believesScam:
   return { amount: believesScam ? 0 : PLAYER_MAX_BET, believesScam };
 }
 
-function simulateRivalRound(round: RoundDef): number {
+// 對手隊伍的模擬投注——詐騙關容易重壓、誠實關偷輸保守，設計上讓對手隊整體表現偏弱
+ function simulateRivalRound(round: RoundDef): number {
   const maxSteps = MAX_BET_PER_ROUND / 1000;
   const steps = round.isScam
     ? Math.round((0.5 + Math.random() * 0.5) * maxSteps)
@@ -283,12 +285,13 @@ export default function Simulator({ onExit }: { onExit: () => void }) {
   }
 
   function askQuestion() {
+    if (qaLog.length >= 1) return;
     const q = questionInput.trim();
     if (!q) return;
-    const hit = round.qaKeywords.some((k) => q.includes(k));
+    const topic = round.qaTopics.find((t) => t.keywords.some((k) => q.includes(k)));
     let answer: string;
-    if (hit) {
-      answer = round.qaHitReply;
+    if (topic) {
+      answer = topic.reply;
     } else {
       const pool = round.isScam ? SCAM_DEFLECTIONS : HONEST_REPLIES;
       answer = pool[Math.floor(Math.random() * pool.length)];
@@ -322,9 +325,8 @@ export default function Simulator({ onExit }: { onExit: () => void }) {
   }
 
   function startBettingPrep() {
-    setChecked165(false);
-    setCheck165Result(null);
     if (isLastRound && verifiedTwist === true) {
+      // 求證成功：大家都知道是詐騙，直接鎖定不出錢，安全過關
       setHumans([
         { believesScam: true, amount: 0 },
         { believesScam: true, amount: 0 },
@@ -334,6 +336,7 @@ export default function Simulator({ onExit }: { onExit: () => void }) {
       setCompBeliefs([true, true]);
       setBettingLocked(true);
     } else {
+      // 一般下注流程（包含「最終關但沒能及時求證」的情況：不強迫 All-in，回到正常判斷）
       setHumans(freshHumans());
       const d1 = computerDecision(round.isScam);
       const d2 = computerDecision(round.isScam);
@@ -534,20 +537,26 @@ export default function Simulator({ onExit }: { onExit: () => void }) {
                 </div>
               ))}
             </div>
-            <div className="flex items-center gap-2">
-              <input
-                value={questionInput}
-                onChange={(e) => setQuestionInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') askQuestion();
-                }}
-                placeholder="輸入你想問關主的問題……"
-                className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-400"
-              />
-              <button onClick={askQuestion} className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-sm font-semibold text-[#0E2A5E]">
-                送出
-              </button>
-            </div>
+            {qaLog.length >= 1 ? (
+              <p className="text-xs text-amber-600 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2">
+                🔒 每一關只能問一個問題，這一關的提問機會已經用完囉。
+              </p>
+            ) : (
+              <div className="flex items-center gap-2">
+                <input
+                  value={questionInput}
+                  onChange={(e) => setQuestionInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') askQuestion();
+                  }}
+                  placeholder="輸入你想問關主的『唯一一個』問題……"
+                  className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-400"
+                />
+                <button onClick={askQuestion} className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-sm font-semibold text-[#0E2A5E]">
+                  送出
+                </button>
+              </div>
+            )}
             <p className="text-[10px] text-slate-400">＊關主回覆為情境模擬生成，非真人客服</p>
             <button
               onClick={goDiscussion}
@@ -610,6 +619,23 @@ export default function Simulator({ onExit }: { onExit: () => void }) {
                 )}
               </div>
             )}
+
+            <div className="bg-slate-50 border border-slate-100 rounded-xl p-3 flex items-center gap-3">
+              <button
+                onClick={query165}
+                disabled={checked165}
+                className="shrink-0 px-3 py-2 rounded-full border border-slate-200 text-sm hover:bg-white disabled:opacity-40 flex items-center gap-1.5 text-slate-600 bg-white"
+              >
+                <ShieldCheck className="w-4 h-4" /> 撥打 165 查證
+              </button>
+              {checked165 ? (
+                <p className={`text-sm text-left ${check165Result ? 'text-rose-600' : 'text-emerald-600'}`}>
+                  {check165Result ? '疑似詐騙來電／話術，請提高警覺！' : '目前無相關詐騙通報紀錄。'}
+                </p>
+              ) : (
+                <p className="text-xs text-slate-400 text-left">討論時可以先撥打 165 查證這一關的關主身份。</p>
+              )}
+            </div>
 
             <p className="text-xs text-slate-400">（這個畫面沒有時間限制，討論好了再自己按下一步）</p>
             <button
@@ -695,24 +721,15 @@ export default function Simulator({ onExit }: { onExit: () => void }) {
               <span className="font-mono font-black text-lg text-[#0E2A5E]">{fmt(totalBet)}</span>
             </div>
 
-            <div className="flex items-center gap-3">
-              <button
-                onClick={query165}
-                disabled={checked165}
-                className="flex-1 py-2.5 rounded-full border border-slate-200 text-sm hover:bg-slate-50 disabled:opacity-40 flex items-center justify-center gap-2 text-slate-600"
-              >
-                <ShieldCheck className="w-4 h-4" /> 撥打 165 查證
-              </button>
-              <button
-                onClick={confirmBet}
-                className="flex-1 py-2.5 rounded-full bg-blue-600 hover:bg-blue-700 text-white font-bold flex items-center justify-center gap-2"
-              >
-                投錢入箱 <ArrowRight className="w-4 h-4" />
-              </button>
-            </div>
+            <button
+              onClick={confirmBet}
+              className="w-full py-2.5 rounded-full bg-blue-600 hover:bg-blue-700 text-white font-bold flex items-center justify-center gap-2"
+            >
+              投錢入箱 <ArrowRight className="w-4 h-4" />
+            </button>
             {checked165 && (
               <p className={`text-sm text-center ${check165Result ? 'text-rose-600' : 'text-emerald-600'}`}>
-                {check165Result ? '165 查證結果：疑似詐騙來電／話術，請提高警覺！' : '165 查證結果：目前無相關詐騙通報紀錄。'}
+                （討論時已查證：{check165Result ? '疑似詐騙來電／話術，請提高警覺！' : '目前無相關詐騙通報紀錄。'}）
               </p>
             )}
           </div>
